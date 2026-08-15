@@ -21,6 +21,9 @@ jobs:
           java-version: 25
           cache: gradle
 
+      - name: Make gradlew executable
+        run: chmod +x gradlew
+
       - name: Build for MC 26.1
         run: ./gradlew build -Ptarget_mc=26.1 --no-daemon
 
