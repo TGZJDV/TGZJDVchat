@@ -3,6 +3,7 @@ package com.tgzjdv.chat;
 import com.tgzjdv.chat.render.AvatarProvider;
 import com.tgzjdv.chat.render.SideChatRenderer;
 import com.tgzjdv.chat.store.ChatStore;
+import com.tgzjdv.chat.update.UpdateChecker;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
@@ -36,6 +37,8 @@ public class TgzjdvChatMod implements ClientModInitializer {
             AvatarProvider.clearCache();
             SideChatRenderer.resetScroll();
             SideChatRenderer.clearLayoutCache();
+            // 进服后后台检查更新（Modrinth 不可用时回退 GitHub）
+            UpdateChecker.checkUpdate();
         });
 
         // 退出动画结束后关闭聊天屏幕（tick 阶段，走原版 onClose 完整关闭流程，避免闪烁）

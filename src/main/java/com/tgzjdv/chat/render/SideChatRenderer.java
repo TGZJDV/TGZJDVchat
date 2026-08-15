@@ -1600,9 +1600,14 @@ public final class SideChatRenderer {
 
     /** 更新淡入淡出动画 */
     private static void updateFadeAlpha() {
+        float step = 1.0f / Math.max(1, SideChatConfig.fadeTicks);
+        if (!SideChatConfig.isAutoHideEnabled()) {
+            // 永不消失：始终显示
+            fadeAlpha = Math.min(1.0f, fadeAlpha + step);
+            return;
+        }
         long idleMillis = System.currentTimeMillis() - ChatStore.getLastMessageTimeMillis();
         long hideDelayMillis = SideChatConfig.autoHideDelaySeconds * 1000L;
-        float step = 1.0f / Math.max(1, SideChatConfig.fadeTicks);
         if (idleMillis > hideDelayMillis) {
             fadeAlpha = Math.max(0.0f, fadeAlpha - step);
         } else {
