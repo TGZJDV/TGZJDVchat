@@ -1,0 +1,126 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.17.19'
+    id 'maven-publish'
+}
+
+// 目标 Minecraft 版本：gradle.properties 的 target_mc 或命令行 -Ptarget_mc=26.1.1 / 26.2
+def targetMc = project.findProperty('target_mc') ?: '26.1.2'
+// 依据目标版本选择 Minecraft / Fabric API 版本（26.1.1 与 26.1.2 同系列，代码与 API 完全兼容）
+def mcVersion = '26.1.2'
+def fabricApiVersion = '0.155.2+26.1.2'
+def versionSrcDir = 'src/mc26_1_2'
+def mcSuffix = '-mc26.1.2'
+// Minecraft 依赖范围：26.1 系列 jar 限定在 26.1（避免在 26.2 加载导致 Mixin 崩溃）；26.2 jar 限定 26.2
+def mcRange = '>=26.1 <26.2'
+if (targetMc == '26.2') {
+    mcVersion = '26.2'
+    fabricApiVersion = '0.157.0+26.2'
+    versionSrcDir = 'src/mc26_2'
+    mcSuffix = '-mc26.2'
+    mcRange = '>=26.2'
+} else if (targetMc == '26.1') {
+    mcVersion = '26.1'
+    fabricApiVersion = '0.155.2+26.1.2'
+    versionSrcDir = 'src/mc26_1_2'
+    mcSuffix = '-mc26.1'
+} else if (targetMc == '26.1.1') {
+    mcVersion = '26.1.1'
+    fabricApiVersion = '0.155.2+26.1.2'
+    versionSrcDir = 'src/mc26_1_2'
+    mcSuffix = '-mc26.1.1'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name + mcSuffix
+}
+
+repositories {
+    // Mod Menu（编译时依赖，用于模组菜单集成）
+    maven { url = "https://maven.terraformersmc.com/releases" }
+}
+
+loom {
+    runs {
+        client {
+            // 离线模式下使用 TGZJDV 账号（服务器已注册账号）
+            programArgs("--username", "TGZJDV")
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir 'src/main/java'
+            srcDir "$versionSrcDir/java"
+        }
+        resources {
+            srcDir 'src/main/resources'
+            srcDir "$versionSrcDir/resources"
+        }
+    }
+}
+
+dependencies {
+    // Minecraft 本体（26.1 起未混淆，无需 mappings）
+    minecraft "com.mojang:minecraft:${mcVersion}"
+    // Fabric Loader（26.1 起使用普通依赖声明）
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    // Fabric API（26.1 起使用普通依赖声明）
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabricApiVersion}"
+    // Mod Menu（编译时，运行时可选）
+    compileOnly "com.terraformersmc:modmenu:18.0.0-beta.1"
+}
+
+processResources {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    inputs.property "version", project.version
+    inputs.property "mcRange", mcRange
+    filesMatching("fabric.mod.json") {
+        expand "version": inputs.properties.version, "mcRange": inputs.properties.mcRange
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+// 所有 Jar 任务统一处理重复资源
+import org.gradle.api.tasks.bundling.Jar
+import org.gradle.api.tasks.Copy
+tasks.withType(Jar).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+jar {
+    inputs.property "archivesName", project.base.archivesName
+
+    from("LICENSE") {
+        rename { "${it}_${inputs.properties.archivesName}" }
+    }
+}
+
+// 配置本地发布（可选）
+publishing {
+    publications {
+        create("mavenJava", MavenPublication) {
+            artifactId = project.archives_base_name
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = "local"
+            url = uri("$buildDir/repo")
+        }
+    }
+}

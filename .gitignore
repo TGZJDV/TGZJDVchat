@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+build/
+out/
+classes/
+
+# Fabric Loom
+run/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Java
+*.class
+*.log
+hs_err_pid*
+replay_pid*
+
+# 编译产物
+*.jar
+!build/libs/*.jar
+
+# 临时
+*.tmp
+*.swp

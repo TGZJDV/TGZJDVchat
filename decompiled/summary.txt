@@ -1,0 +1,2 @@
+Summary for /mnt/c/Users/TGZJDV/TGZJDVchat/.gradle/loom-cache/minecraftMaven/net/minecraft/minecraft-merged-043a8b3edf/26.1.2/minecraft-merged-043a8b3edf-26.1.2.jar
+Decompiled with CFR 0.152

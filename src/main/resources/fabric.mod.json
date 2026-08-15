@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "tgzjdvchat",
+  "version": "${version}",
+  "name": "TGZJDV's Chat",
+  "description": "TGZJDV的聊天框 - 一款改进Minecraft聊天框的Fabric模组",
+  "authors": [
+    "TGZJDV"
+  ],
+  "contact": {
+    "homepage": "https://modrinth.com/project/TIwmn59c",
+    "issues": "https://github.com/TGZJDV/TGZJDVchat/issues",
+    "sources": "https://github.com/TGZJDV/TGZJDVchat"
+  },
+  "license": "MIT",
+  "icon": "assets/tgzjdvchat/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.tgzjdv.chat.TgzjdvChatMod"
+    ],
+    "modmenu": [
+      "com.tgzjdv.chat.TgzjdvModMenu"
+    ]
+  },
+  "mixins": [
+    "tgzjdvchat.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.3",
+    "minecraft": "${mcRange}",
+    "java": ">=25",
+    "fabric-api": "*"
+  }
+}

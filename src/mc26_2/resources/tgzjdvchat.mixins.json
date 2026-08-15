@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "com.tgzjdv.chat.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ChatComponentMixin",
+    "ChatScreenMixin",
+    "CommandSuggestionsMixin",
+    "HudMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
