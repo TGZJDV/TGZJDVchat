@@ -71,4 +71,4 @@ MIT License（详见 LICENSE 文件）
 ## 🙏 致谢
 
 - Chat Pro（更好的聊天栏）：消息格式兼容，作者 [Abacbcdcnd](https://github.com/Abacbcdcnd)
-- Telegraph-Image：图床方案
+- CloudFlare-ImgBed-D1：图床方案
