@@ -199,7 +199,7 @@ public class UpdateScreen extends Screen {
     private void startDownload() {
         if (!UpdateChecker.hasDownload()) {
             state = State.FAILED;
-            error = "\u6ca1\u6709\u53ef\u7528\u7684\u4e0b\u8f7d\u5730\u5740";
+            error = "\u5f53\u524d\u6e38\u620f\u7248\u672c\u6ca1\u6709\u5bf9\u5e94\u7684\u66f4\u65b0\u6587\u4ef6\uff0c\u8bf7\u7b49\u5f85\u4f5c\u8005\u53d1\u5e03\u540e\u518d\u66f4\u65b0";
             return;
         }
         state = State.DOWNLOADING;
@@ -327,7 +327,7 @@ public class UpdateScreen extends Screen {
         return s;
     }
 
-    /** 生成 Windows 替换脚本（等待游戏退出后删除旧 jar、移入新 jar） */
+    /** 生成 Windows 替换脚本（等待游戏退出后删除旧 jar，成功后才移入新 jar） */
     private static String buildApplyBatch(String oldName, String newName) {
         return "@echo off\r\n"
                 + "rem TGZJDV Chat auto-update\r\n"
@@ -338,8 +338,11 @@ public class UpdateScreen extends Screen {
                 + "    del /q \"..\\mods\\" + oldName + "\" 2>nul\r\n"
                 + "    if not exist \"..\\mods\\" + oldName + "\" goto replaced\r\n"
                 + ")\r\n"
+                + "rem delete failed: do not install new jar (avoid old+new both present)\r\n"
+                + "goto cleanup\r\n"
                 + ":replaced\r\n"
                 + "move /y \"" + newName + "\" \"..\\mods\\" + newName + "\" >nul 2>nul\r\n"
+                + ":cleanup\r\n"
                 + "cd ..\r\n"
                 + "rmdir /s /q \".tgzjdvchat-update\" 2>nul\r\n";
     }

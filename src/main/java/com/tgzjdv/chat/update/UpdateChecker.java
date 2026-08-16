@@ -200,13 +200,10 @@ public final class UpdateChecker {
         latestVersion = v;
         latestChangelog = truncate(cleanChangelog(body));
         // 匹配当前游戏版本的资产文件（如 tgzjdvchat-mc26.1.2-1.4.0.jar）
+        // 仅精确匹配，绝不 fallback 到任意 "tgzjdvchat-mc" 前缀（否则会匹配错 MC 版本）
         String mcVer = getMinecraftVersion();
         String prefix = "tgzjdvchat-mc" + mcVer + "-";
         String url = findGithubAssetUrl(resp, prefix);
-        if (url == null && !mcVer.isEmpty()) {
-            // 精确版本未匹配时，尝试带 "mc" 前缀的任意匹配（文件名含 mc 版本）
-            url = findGithubAssetUrl(resp, "tgzjdvchat-mc");
-        }
         if (url != null) {
             latestDownloadUrl = url;
             latestFileName = fileNameFromUrl(url);
@@ -276,10 +273,21 @@ public final class UpdateChecker {
         return name;
     }
 
-    /** 获取当前 Minecraft 版本（如 26.1.2） */
+    /** 获取当前 Minecraft 版本（如 26.1.2，仅保留数字和点，去除任何后缀/异常字符） */
     public static String getMinecraftVersion() {
         try {
-            return Minecraft.getInstance().getLaunchedVersion();
+            String v = Minecraft.getInstance().getLaunchedVersion();
+            if (v == null) {
+                return "";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < v.length(); i++) {
+                char c = v.charAt(i);
+                if ((c >= '0' && c <= '9') || c == '.') {
+                    sb.append(c);
+                }
+            }
+            return sb.toString();
         } catch (Exception e) {
             return "";
         }
