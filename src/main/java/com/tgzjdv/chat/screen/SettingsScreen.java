@@ -31,6 +31,8 @@ public class SettingsScreen extends Screen {
     private EditBox tpaCmdInput;
     private EditBox tpahereCmdInput;
     private AutoHideDelaySlider hideDelaySlider;
+    /** 是否按住眼睛按钮（true 时密码显示明文） */
+    private boolean showPassword = false;
     private final boolean autoLogin;
 
     /** 返回界面（模组菜单进入时设置，关闭时返回） */
@@ -54,6 +56,9 @@ public class SettingsScreen extends Screen {
         this.passwordInput.setMaxLength(64);
         this.passwordInput.setValue(ChatAuthConfig.getLoginPassword());
         this.passwordInput.setResponder(text -> ChatAuthConfig.setLoginPassword(text));
+        // 密码掩码：按住眼睛按钮（showPassword=true）时显示明文，否则显示 ••••••
+        this.passwordInput.addFormatter((text, cursorPos) ->
+                Component.literal(showPassword ? text : "\u2022".repeat(text.length())).getVisualOrderText());
         this.addRenderableWidget(this.passwordInput);
         // 登录命令
         this.loginCmdInput = new EditBox(this.font, centerX, startY + 26, 260, 20, Component.literal("登录命令"));
@@ -115,6 +120,15 @@ public class SettingsScreen extends Screen {
         graphics.centeredText(this.font, "\u2715", closeX + 11, closeY + (22 - this.font.lineHeight) / 2, 0xFFFFFFFF);
         // 标题
         graphics.centeredText(this.font, this.title, this.width / 2, startY - 35, 0xFFFFFFFF);
+        // 密码显示眼睛按钮（按住显示明文，松开恢复掩码）
+        int eyeX = centerX + 260 + 4;
+        boolean eyeHover = mouseX >= eyeX && mouseX <= eyeX + 20 && mouseY >= startY && mouseY <= startY + 20;
+        graphics.fill(eyeX, startY, eyeX + 20, startY + 20, showPassword ? 0xFF3A6B2E : (eyeHover ? 0xFF3A4048 : 0xFF2A2F38));
+        graphics.horizontalLine(eyeX, eyeX + 20, startY, 0x66AAAAAA);
+        graphics.horizontalLine(eyeX, eyeX + 20, startY + 20, 0x66AAAAAA);
+        graphics.verticalLine(eyeX, startY, startY + 20, 0x66AAAAAA);
+        graphics.verticalLine(eyeX + 20, startY, startY + 20, 0x66AAAAAA);
+        graphics.centeredText(this.font, "\u25c9", eyeX + 10, startY + 5, showPassword ? 0xFF7CD58A : 0xFFFFFFFF);
         // 标签
         graphics.text(this.font, "登录密码", centerX - 5 - this.font.width("登录密码"), startY + 3, 0xFF8A9199, false);
         graphics.text(this.font, "登录命令", centerX - 5 - this.font.width("登录命令"), startY + 29, 0xFF8A9199, false);
@@ -166,27 +180,39 @@ public class SettingsScreen extends Screen {
             graphics.text(this.font, "\u00a77\u672a\u68c0\u67e5\uff08\u70b9\u51fb\u4e0b\u65b9\u6309\u94ae\u68c0\u67e5\uff09",
                     centerX, statusY, 0xFF9AA0A6, false);
         }
-        // 检查更新按钮
+        // 按钮行：检查更新 / 立即更新 / 打开下载页
         int btnY = upY + 28;
         int btnH = 18;
-        boolean chkHover = mouseX >= centerX && mouseX <= centerX + 92 && mouseY >= btnY && mouseY <= btnY + btnH;
-        graphics.fill(centerX, btnY, centerX + 92, btnY + btnH, chkHover ? 0xFF3A4048 : 0xFF2A2F38);
-        graphics.horizontalLine(centerX, centerX + 92, btnY, 0x66AAAAAA);
-        graphics.horizontalLine(centerX, centerX + 92, btnY + btnH, 0x66AAAAAA);
+        boolean hasUpd = UpdateChecker.isChecked() && UpdateChecker.hasUpdate();
+        int chkW = hasUpd ? 88 : 92;
+        boolean chkHover = mouseX >= centerX && mouseX <= centerX + chkW && mouseY >= btnY && mouseY <= btnY + btnH;
+        graphics.fill(centerX, btnY, centerX + chkW, btnY + btnH, chkHover ? 0xFF3A4048 : 0xFF2A2F38);
+        graphics.horizontalLine(centerX, centerX + chkW, btnY, 0x66AAAAAA);
+        graphics.horizontalLine(centerX, centerX + chkW, btnY + btnH, 0x66AAAAAA);
         graphics.verticalLine(centerX, btnY, btnY + btnH, 0x66AAAAAA);
-        graphics.verticalLine(centerX + 92, btnY, btnY + btnH, 0x66AAAAAA);
-        graphics.centeredText(this.font, "检查更新", centerX + 46, btnY + 4, 0xFFFFFFFF);
-        // 打开下载页按钮（发现新版本时显示）
-        if (UpdateChecker.isChecked() && UpdateChecker.hasUpdate()) {
-            int openX = centerX + 100;
-            int openW = 116;
+        graphics.verticalLine(centerX + chkW, btnY, btnY + btnH, 0x66AAAAAA);
+        graphics.centeredText(this.font, "检查更新", centerX + chkW / 2, btnY + 4, 0xFFFFFFFF);
+        // 有更新时：立即更新（游戏内下载替换）+ 打开下载页
+        if (hasUpd) {
+            int updX = centerX + 96;
+            int updW = 88;
+            boolean updHover = mouseX >= updX && mouseX <= updX + updW && mouseY >= btnY && mouseY <= btnY + btnH;
+            graphics.fill(updX, btnY, updX + updW, btnY + btnH, updHover ? 0xFF2E6B47 : 0xFF245A3A);
+            graphics.horizontalLine(updX, updX + updW, btnY, 0x66AAAAAA);
+            graphics.horizontalLine(updX, updX + updW, btnY + btnH, 0x66AAAAAA);
+            graphics.verticalLine(updX, btnY, btnY + btnH, 0x66AAAAAA);
+            graphics.verticalLine(updX + updW, btnY, btnY + btnH, 0x66AAAAAA);
+            graphics.centeredText(this.font, "立即更新", updX + updW / 2, btnY + 4, 0xFFFFFFFF);
+            // 打开下载页按钮
+            int openX = centerX + 192;
+            int openW = 68;
             boolean openHover = mouseX >= openX && mouseX <= openX + openW && mouseY >= btnY && mouseY <= btnY + btnH;
-            graphics.fill(openX, btnY, openX + openW, btnY + btnH, openHover ? 0xFF2E6B47 : 0xFF245A3A);
+            graphics.fill(openX, btnY, openX + openW, btnY + btnH, openHover ? 0xFF3A4048 : 0xFF2A2F38);
             graphics.horizontalLine(openX, openX + openW, btnY, 0x66AAAAAA);
             graphics.horizontalLine(openX, openX + openW, btnY + btnH, 0x66AAAAAA);
             graphics.verticalLine(openX, btnY, btnY + btnH, 0x66AAAAAA);
             graphics.verticalLine(openX + openW, btnY, btnY + btnH, 0x66AAAAAA);
-            graphics.centeredText(this.font, "打开下载页", openX + openW / 2, btnY + 4, 0xFFFFFFFF);
+            graphics.centeredText(this.font, "下载页", openX + openW / 2, btnY + 4, 0xFFFFFFFF);
         }
         // 关于（模组兼容信息）
         int aboutY = upY + 58;
@@ -209,24 +235,39 @@ public class SettingsScreen extends Screen {
             }
             int centerX = this.width / 2 - 130;
             int startY = TOP_OFFSET;
+            // 密码显示眼睛按钮（按住显示明文）
+            int eyeX = centerX + 260 + 4;
+            if (mx >= eyeX && mx <= eyeX + 20 && my >= startY && my <= startY + 20) {
+                showPassword = true;
+                return true;
+            }
             int modeX = centerX;
             int modeY = startY + 185;
             if (mx >= modeX && mx <= modeX + 260 && my >= modeY && my <= modeY + 18) {
                 com.tgzjdv.chat.config.ChatAuthConfig.setImageSafeMode(!com.tgzjdv.chat.config.ChatAuthConfig.isImageSafeMode());
                 return true;
             }
-            // 更新检查按钮
+            // 按钮行：检查更新 / 立即更新 / 打开下载页
             int btnY = startY + 272 + 28;
             int btnH = 18;
-            if (mx >= centerX && mx <= centerX + 92 && my >= btnY && my <= btnY + btnH) {
+            boolean hasUpd = UpdateChecker.isChecked() && UpdateChecker.hasUpdate();
+            int chkW = hasUpd ? 88 : 92;
+            if (mx >= centerX && mx <= centerX + chkW && my >= btnY && my <= btnY + btnH) {
                 UpdateChecker.checkUpdate(() -> {
                 });
                 return true;
             }
-            // 打开下载页按钮（发现新版本时）
-            if (UpdateChecker.isChecked() && UpdateChecker.hasUpdate()) {
-                int openX = centerX + 100;
-                int openW = 116;
+            if (hasUpd) {
+                // 立即更新（游戏内下载替换）
+                int updX = centerX + 96;
+                int updW = 88;
+                if (mx >= updX && mx <= updX + updW && my >= btnY && my <= btnY + btnH) {
+                    SideChatRenderer.setScreenCompat(new UpdateScreen());
+                    return true;
+                }
+                // 打开下载页
+                int openX = centerX + 192;
+                int openW = 68;
                 if (mx >= openX && mx <= openX + openW && my >= btnY && my <= btnY + btnH) {
                     UpdateChecker.openUpdatePage();
                     return true;
@@ -234,6 +275,15 @@ public class SettingsScreen extends Screen {
             }
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
+        if (event.button() == 0 && showPassword) {
+            showPassword = false; // 松开眼睛按钮，恢复密码掩码
+            return true;
+        }
+        return super.mouseReleased(event);
     }
 
     @Override

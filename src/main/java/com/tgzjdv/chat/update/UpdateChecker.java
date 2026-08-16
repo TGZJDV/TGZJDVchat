@@ -33,6 +33,10 @@ public final class UpdateChecker {
 
     private static volatile String latestVersion = null;
     private static volatile String latestChangelog = null;
+    /** 匹配当前游戏版本的最新版 jar 下载地址 */
+    private static volatile String latestDownloadUrl = null;
+    /** 下载文件名（如 tgzjdvchat-mc26.1.2-1.4.1.jar） */
+    private static volatile String latestFileName = null;
     private static volatile Source source = null;
     private static volatile boolean checked = false;
     private static volatile boolean checking = false;
@@ -132,20 +136,60 @@ public final class UpdateChecker {
         return new String(conn.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    /** 解析 Modrinth API 响应（JSON 数组，取第一个最新版本） */
+    /**
+     * 解析 Modrinth API 响应（JSON 数组，多个版本按日期倒序）
+     * 找到 game_versions 匹配当前游戏版本的最新版本，提取其主文件下载地址
+     */
     private static boolean parseModrinth(String resp) {
-        String v = extractJsonString(resp, "version_number");
-        String cl = extractJsonString(resp, "changelog");
-        v = normalizeVersion(v);
-        if (v == null) {
-            return false;
+        String mcVer = getMinecraftVersion();
+        int pos = 0;
+        while (true) {
+            int vnIdx = resp.indexOf("\"version_number\":", pos);
+            if (vnIdx < 0) {
+                break;
+            }
+            int next = resp.indexOf("\"version_number\":", vnIdx + 1);
+            if (next < 0) {
+                next = resp.length();
+            }
+            String block = resp.substring(vnIdx, next);
+            String v = normalizeVersion(extractJsonString(block, "version_number"));
+            // 该版本是否支持当前游戏版本（game_versions 数组中包含）
+            boolean matched = mcVer.isEmpty() || block.contains("\"" + mcVer + "\"");
+            if (matched && v != null) {
+                String url = extractModrinthPrimaryUrl(block);
+                if (url != null) {
+                    latestVersion = v;
+                    latestDownloadUrl = url;
+                    latestFileName = fileNameFromUrl(url);
+                    latestChangelog = truncate(cleanChangelog(extractJsonString(block, "changelog")));
+                    return true;
+                }
+            }
+            pos = next;
         }
-        latestVersion = v;
-        latestChangelog = truncate(cleanChangelog(cl));
-        return true;
+        return false;
     }
 
-    /** 解析 GitHub Releases API 响应（tag_name 形如 v1.4.0，body 为更新日志） */
+    /** 从 Modrinth 版本块中提取 primary=true 文件的下载地址 */
+    private static String extractModrinthPrimaryUrl(String block) {
+        int primIdx = block.indexOf("\"primary\":true");
+        if (primIdx < 0) {
+            return null;
+        }
+        int urlIdx = block.lastIndexOf("\"url\":\"", primIdx);
+        if (urlIdx < 0) {
+            return null;
+        }
+        int start = urlIdx + "\"url\":\"".length();
+        int end = block.indexOf('"', start);
+        return end > start ? block.substring(start, end) : null;
+    }
+
+    /**
+     * 解析 GitHub Releases API 响应（tag_name 形如 v1.4.0，body 为更新日志）
+     * 在 assets 中寻找文件名匹配当前游戏版本的 jar，提取其下载地址
+     */
     private static boolean parseGithub(String resp) {
         String tag = extractJsonString(resp, "tag_name");
         String body = extractJsonString(resp, "body");
@@ -155,7 +199,101 @@ public final class UpdateChecker {
         }
         latestVersion = v;
         latestChangelog = truncate(cleanChangelog(body));
+        // 匹配当前游戏版本的资产文件（如 tgzjdvchat-mc26.1.2-1.4.0.jar）
+        String mcVer = getMinecraftVersion();
+        String prefix = "tgzjdvchat-mc" + mcVer + "-";
+        String url = findGithubAssetUrl(resp, prefix);
+        if (url == null && !mcVer.isEmpty()) {
+            // 精确版本未匹配时，尝试带 "mc" 前缀的任意匹配（文件名含 mc 版本）
+            url = findGithubAssetUrl(resp, "tgzjdvchat-mc");
+        }
+        if (url != null) {
+            latestDownloadUrl = url;
+            latestFileName = fileNameFromUrl(url);
+        }
         return true;
+    }
+
+    /** 在 GitHub releases 响应中查找 name 以 prefix 开头的 asset 的下载地址 */
+    private static String findGithubAssetUrl(String resp, String prefix) {
+        int idx = 0;
+        while (true) {
+            int nameIdx = resp.indexOf("\"name\":", idx);
+            if (nameIdx < 0) {
+                break;
+            }
+            int nameStart = resp.indexOf('"', nameIdx + "\"name\":".length()) + 1;
+            if (nameStart <= 0) {
+                break;
+            }
+            int nameEnd = resp.indexOf('"', nameStart);
+            if (nameEnd < 0) {
+                break;
+            }
+            String name = resp.substring(nameStart, nameEnd);
+            int urlIdx = resp.indexOf("\"browser_download_url\":", nameEnd);
+            if (urlIdx < 0) {
+                break;
+            }
+            int urlStart = resp.indexOf('"', urlIdx + "\"browser_download_url\":".length()) + 1;
+            int urlEnd = resp.indexOf('"', urlStart);
+            if (urlEnd > urlStart && name.startsWith(prefix) && name.endsWith(".jar")) {
+                return resp.substring(urlStart, urlEnd);
+            }
+            idx = nameEnd;
+        }
+        return null;
+    }
+
+    /** 从下载地址中提取文件名（已净化，防止路径遍历） */
+    private static String fileNameFromUrl(String url) {
+        int idx = url.lastIndexOf('/');
+        String name = idx >= 0 ? url.substring(idx + 1) : url;
+        // 去除可能的查询参数
+        int q = name.indexOf('?');
+        if (q >= 0) {
+            name = name.substring(0, q);
+        }
+        return sanitizeUrlFileName(name);
+    }
+
+    /** 净化 URL 提取的文件名：仅保留安全字符，拒绝路径分隔符与 ..（无效返回 null） */
+    private static String sanitizeUrlFileName(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+            if (!ok) {
+                return null;
+            }
+        }
+        if (name.contains("..") || name.startsWith(".") || name.endsWith(".")) {
+            return null;
+        }
+        return name;
+    }
+
+    /** 获取当前 Minecraft 版本（如 26.1.2） */
+    public static String getMinecraftVersion() {
+        try {
+            return Minecraft.getInstance().getLaunchedVersion();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** 获取当前模组 jar 文件的路径（运行环境下的 mods 目录 jar） */
+    public static java.nio.file.Path getModJarPath() {
+        try {
+            return net.fabricmc.loader.api.FabricLoader.getInstance()
+                    .getModContainer(TgzjdvChatMod.MOD_ID).get()
+                    .getOrigin().getPaths().get(0);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 从 JSON 字符串中提取指定 key 的字符串值（未找到返回 null） */
@@ -236,6 +374,21 @@ public final class UpdateChecker {
     /** 最新版本更新日志 */
     public static String getLatestChangelog() {
         return latestChangelog;
+    }
+
+    /** 匹配当前游戏版本的最新版下载地址（无则 null） */
+    public static String getLatestDownloadUrl() {
+        return latestDownloadUrl;
+    }
+
+    /** 下载文件名（如 tgzjdvchat-mc26.1.2-1.4.1.jar，无则 null） */
+    public static String getLatestFileName() {
+        return latestFileName;
+    }
+
+    /** 是否有可用的下载地址 */
+    public static boolean hasDownload() {
+        return latestDownloadUrl != null && !latestDownloadUrl.isEmpty();
     }
 
     /** 是否已检查过（无论成功与否） */
