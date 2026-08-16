@@ -1692,11 +1692,11 @@ public final class SideChatRenderer {
         graphics.text(font, countText, countX, top + (TITLE_BAR_HEIGHT - font.lineHeight) / 2, COLOR_COUNT_TEXT);
         graphics.horizontalLine(left, right, titleBottom, COLOR_DIVIDER);
 
-        // 上传进度条（面板顶部，标题栏下方）
-        renderUploadProgress(graphics, font, left, right, titleBottom);
-
         // ===== 3. 消息列表（微信样式） =====
         renderWeChatMessages(graphics, font);
+
+        // 上传进度条（在消息列表之后渲染，悬浮于消息之上，避免被消息覆盖）
+        renderUploadProgress(graphics, font, left, right, titleBottom);
 
         // ===== 4. 输入区域 =====
         int inputTop = bottom - INPUT_AREA_HEIGHT;
@@ -2003,6 +2003,9 @@ public final class SideChatRenderer {
         }
     }
 
+    /** 上传进度条显示进度（渲染端平滑插值，避免本地写流瞬移导致 0→95 跳变） */
+    private static float uploadDisplayProgress = 0f;
+
     /** 渲染聊天栏顶部的上传进度条（标题栏下方） */
     private static void renderUploadProgress(GuiGraphicsExtractor graphics, Font font, int left, int right, int topBar) {
         boolean uploading = com.tgzjdv.chat.image.UploadState.isUploading();
@@ -2025,8 +2028,18 @@ public final class SideChatRenderer {
 
         // 进度条背景
         graphics.fill(barLeft, barY, barRight, barY + barH, 0xFF252A33);
+        // 显示进度平滑逼近真实进度（真实进度瞬间到 95%，这里插值让条连续滚动）
+        float target = com.tgzjdv.chat.image.UploadState.getProgress();
+        if (uploadDisplayProgress < target) {
+            uploadDisplayProgress += (target - uploadDisplayProgress) * 0.12f;
+            if (target - uploadDisplayProgress < 0.005f) {
+                uploadDisplayProgress = target;
+            }
+        } else {
+            uploadDisplayProgress = target;
+        }
+        float p = uploadDisplayProgress;
         // 填充
-        float p = com.tgzjdv.chat.image.UploadState.getProgress();
         if (error) {
             graphics.fill(barLeft, barY, barRight, barY + barH, 0xFFE74C3C);
         } else if (p > 0.01f) {
