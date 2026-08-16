@@ -1,5 +1,7 @@
 package com.tgzjdv.chat.update;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import com.tgzjdv.chat.TgzjdvChatMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -211,33 +213,28 @@ public final class UpdateChecker {
         return true;
     }
 
-    /** 在 GitHub releases 响应中查找 name 以 prefix 开头的 asset 的下载地址 */
+    /** 在 GitHub releases 响应中查找 name 以 prefix 开头的 asset 的下载地址（Gson 解析，健壮） */
     private static String findGithubAssetUrl(String resp, String prefix) {
-        int idx = 0;
-        while (true) {
-            int nameIdx = resp.indexOf("\"name\":", idx);
-            if (nameIdx < 0) {
-                break;
+        try {
+            JsonObject root = new com.google.gson.Gson().fromJson(resp, JsonObject.class);
+            if (root == null || !root.has("assets") || !root.get("assets").isJsonArray()) {
+                return null;
             }
-            int nameStart = resp.indexOf('"', nameIdx + "\"name\":".length()) + 1;
-            if (nameStart <= 0) {
-                break;
+            JsonArray assets = root.get("assets").getAsJsonArray();
+            for (var e : assets) {
+                if (e.isJsonNull()) {
+                    continue;
+                }
+                JsonObject asset = e.getAsJsonObject();
+                String name = asset.has("name") && !asset.get("name").isJsonNull()
+                        ? asset.get("name").getAsString() : "";
+                String url = asset.has("browser_download_url") && !asset.get("browser_download_url").isJsonNull()
+                        ? asset.get("browser_download_url").getAsString() : null;
+                if (name.startsWith(prefix) && name.endsWith(".jar") && url != null) {
+                    return url;
+                }
             }
-            int nameEnd = resp.indexOf('"', nameStart);
-            if (nameEnd < 0) {
-                break;
-            }
-            String name = resp.substring(nameStart, nameEnd);
-            int urlIdx = resp.indexOf("\"browser_download_url\":", nameEnd);
-            if (urlIdx < 0) {
-                break;
-            }
-            int urlStart = resp.indexOf('"', urlIdx + "\"browser_download_url\":".length()) + 1;
-            int urlEnd = resp.indexOf('"', urlStart);
-            if (urlEnd > urlStart && name.startsWith(prefix) && name.endsWith(".jar")) {
-                return resp.substring(urlStart, urlEnd);
-            }
-            idx = nameEnd;
+        } catch (Exception ignored) {
         }
         return null;
     }
@@ -273,8 +270,26 @@ public final class UpdateChecker {
         return name;
     }
 
-    /** 获取当前 Minecraft 版本（如 26.1.2，仅保留数字和点，去除任何后缀/异常字符） */
+    /**
+     * 获取当前 Minecraft 版本（如 26.1.2）。
+     * 优先从当前模组 jar 文件名提取（tgzjdvchat-mc26.1.2-... → 26.1.2），最可靠；
+     * 兜底用 getLaunchedVersion() 净化（仅保留数字和点）。
+     */
     public static String getMinecraftVersion() {
+        // 1) 从当前 mod jar 文件名提取（与实际加载版本 100% 一致）
+        try {
+            java.nio.file.Path jar = getModJarPath();
+            if (jar != null && jar.getFileName() != null) {
+                String name = jar.getFileName().toString();
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile("mc(\\d+(?:\\.\\d+){1,2})").matcher(name);
+                if (m.find()) {
+                    return m.group(1);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        // 2) 兜底：getLaunchedVersion 净化
         try {
             String v = Minecraft.getInstance().getLaunchedVersion();
             if (v == null) {
