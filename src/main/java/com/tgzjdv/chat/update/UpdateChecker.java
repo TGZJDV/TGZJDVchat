@@ -245,13 +245,35 @@ public final class UpdateChecker {
         return null;
     }
 
-    /** 从下载地址中提取文件名 */
+    /** 从下载地址中提取文件名（已净化，防止路径遍历） */
     private static String fileNameFromUrl(String url) {
         int idx = url.lastIndexOf('/');
         String name = idx >= 0 ? url.substring(idx + 1) : url;
         // 去除可能的查询参数
         int q = name.indexOf('?');
-        return q >= 0 ? name.substring(0, q) : name;
+        if (q >= 0) {
+            name = name.substring(0, q);
+        }
+        return sanitizeUrlFileName(name);
+    }
+
+    /** 净化 URL 提取的文件名：仅保留安全字符，拒绝路径分隔符与 ..（无效返回 null） */
+    private static String sanitizeUrlFileName(String name) {
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+            if (!ok) {
+                return null;
+            }
+        }
+        if (name.contains("..") || name.startsWith(".") || name.endsWith(".")) {
+            return null;
+        }
+        return name;
     }
 
     /** 获取当前 Minecraft 版本（如 26.1.2） */

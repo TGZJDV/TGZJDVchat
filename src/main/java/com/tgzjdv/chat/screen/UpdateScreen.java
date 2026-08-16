@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.network.chat.Component;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -206,12 +207,13 @@ public class UpdateScreen extends Screen {
         downloaded = 0;
         total = 0;
         String url = UpdateChecker.getLatestDownloadUrl();
-        String fileName = UpdateChecker.getLatestFileName();
+        // 文件名严格净化，非法时回退到固定安全名（防止路径遍历）
+        String fileName = sanitizeFileName(UpdateChecker.getLatestFileName());
         Path tmpDir = Minecraft.getInstance().gameDirectory.toPath().resolve(".tgzjdvchat-update");
         Path target;
         try {
             Files.createDirectories(tmpDir);
-            target = tmpDir.resolve(fileName != null && !fileName.isEmpty() ? fileName : "tgzjdvchat-update.jar");
+            target = tmpDir.resolve(fileName != null ? fileName : "tgzjdvchat-update.jar");
         } catch (Exception e) {
             state = State.FAILED;
             error = "\u521b\u5efa\u4e34\u65f6\u76ee\u5f55\u5931\u8d25\uff1a" + e.getMessage();
@@ -251,10 +253,28 @@ public class UpdateScreen extends Screen {
                 applying = false;
                 return;
             }
-            String oldName = modJar.getFileName().toString();
-            String newName = UpdateChecker.getLatestFileName();
-            if (newName == null || newName.isEmpty()) {
-                newName = downloaded.getFileName().toString();
+            // 校验下载文件确实是 jar（ZIP 魔数 PK\x03\x04），防止下载到非 jar 内容
+            try (InputStream in = Files.newInputStream(downloaded)) {
+                byte[] head = new byte[4];
+                int read = in.read(head);
+                if (read < 4 || head[0] != 0x50 || head[1] != 0x4B || head[2] != 0x03 || head[3] != 0x04) {
+                    state = State.FAILED;
+                    error = "\u4e0b\u8f7d\u7684\u6587\u4ef6\u4e0d\u662f\u6709\u6548\u7684 jar\uff0c\u5df2\u53d6\u6d88\u66f4\u65b0";
+                    applying = false;
+                    return;
+                }
+            }
+            // 文件名严格净化（防止路径遍历 / bat 命令注入）：仅允许安全字符且必须以 .jar 结尾
+            String oldName = sanitizeFileName(modJar.getFileName().toString());
+            String newName = sanitizeFileName(UpdateChecker.getLatestFileName());
+            if (newName == null) {
+                newName = sanitizeFileName(downloaded.getFileName().toString());
+            }
+            if (oldName == null || newName == null) {
+                state = State.FAILED;
+                error = "\u6587\u4ef6\u540d\u4e0d\u7b26\u5408\u89c4\u683c\uff0c\u5df2\u53d6\u6d88\u66f4\u65b0";
+                applying = false;
+                return;
             }
             Path modsDir = modJar.getParent();
             Path tmpDir = Minecraft.getInstance().gameDirectory.toPath().resolve(".tgzjdvchat-update");
@@ -282,6 +302,35 @@ public class UpdateScreen extends Screen {
             error = "\u5e94\u7528\u66f4\u65b0\u5931\u8d25\uff1a" + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
             applying = false;
         }
+    }
+
+    /**
+     * 净化文件名：仅允许安全的基本文件名（字母数字 _ - . 且必须以 .jar 结尾）。
+     * 拒绝路径分隔符、.. 及任何危险字符，防止路径遍历（CWE-22）与 bat 命令注入。
+     *
+     * @return 净化后的文件名；非法返回 null
+     */
+    private static String sanitizeFileName(String name) {
+        if (name == null) {
+            return null;
+        }
+        String s = name.trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9') || c == '_' || c == '-' || c == '.';
+            if (!ok) {
+                return null;
+            }
+        }
+        // 拒绝 ..、以点开头/结尾，且必须以 .jar 结尾
+        if (s.contains("..") || s.startsWith(".") || s.endsWith(".") || !s.endsWith(".jar")) {
+            return null;
+        }
+        return s;
     }
 
     /** 生成 Windows 替换脚本（等待游戏退出后删除旧 jar、移入新 jar） */
