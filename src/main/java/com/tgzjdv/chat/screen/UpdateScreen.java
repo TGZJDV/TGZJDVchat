@@ -207,12 +207,13 @@ public class UpdateScreen extends Screen {
         downloaded = 0;
         total = 0;
         String url = UpdateChecker.getLatestDownloadUrl();
+        // 下载临时文件名取自远程（净化后），非法时回退固定安全名
+        String fileName = sanitizeFileName(UpdateChecker.getLatestFileName());
         Path tmpDir = Minecraft.getInstance().gameDirectory.toPath().resolve(".tgzjdvchat-update");
         Path target;
         try {
             Files.createDirectories(tmpDir);
-            // 下载临时文件名固定为本地安全名（不依赖远程文件名，防止路径遍历）
-            target = tmpDir.resolve("tgzjdvchat-update.jar");
+            target = tmpDir.resolve(fileName != null ? fileName : "tgzjdvchat-update.jar");
         } catch (Exception e) {
             state = State.FAILED;
             error = "\u521b\u5efa\u4e34\u65f6\u76ee\u5f55\u5931\u8d25\uff1a" + e.getMessage();
@@ -238,12 +239,7 @@ public class UpdateScreen extends Screen {
         downloadThread.start();
     }
 
-    /**
-     * 下载完成后应用更新：替换 jar 并关闭游戏。
-     * 所有文件名均经 {@link #sanitizeFileName} 净化（白名单 + 移除危险字符），
-     * 且下载文件已验证为 jar（ZIP 魔数），路径操作安全，故抑制 CodeQL 路径注入告警。
-     */
-    @SuppressWarnings("java/path-injection")
+    /** 下载完成后应用更新：替换 jar 并关闭游戏 */
     private void applyUpdate(Path downloaded) {
         if (applying) {
             return;
@@ -268,11 +264,12 @@ public class UpdateScreen extends Screen {
                     return;
                 }
             }
-            // 文件名严格净化（防止路径遍历 / bat 命令注入）：仅允许安全字符且必须以 .jar 结尾
+            // 旧文件名来自本地 mod jar（净化后）
             String oldName = sanitizeFileName(modJar.getFileName().toString());
+            // 新文件名取自远程（净化后，如 tgzjdvchat-mc26.1.2-1.4.3.jar，带真实版本号）
             String newName = sanitizeFileName(UpdateChecker.getLatestFileName());
             if (newName == null) {
-                newName = sanitizeFileName(downloaded.getFileName().toString());
+                newName = sanitizeFileName("tgzjdvchat-mc" + UpdateChecker.getMinecraftVersion() + "-update.jar");
             }
             if (oldName == null || newName == null) {
                 state = State.FAILED;
